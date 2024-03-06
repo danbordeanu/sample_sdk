@@ -1,0 +1,82 @@
+
+import time
+
+# import helpers.textconsole as report
+from helpers import logger_settings
+import sys
+from helpers import file_utils
+
+# import helpers.unit_paramiko.nodeip as remoteexecutor
+from helpers.unit_paramiko import nodeip
+from .. InitDataTest import InitDataTest
+
+# api
+from helpers.hpcapi_verbs import admin
+from helpers.hpcapi_verbs.fileEndpoint import get_sha
+
+# random
+import string
+import random
+import json
+
+from helpers.Error import ExceptionType
+from helpers.Error import UATError 
+
+class FileShaTest(InitDataTest):
+
+    def __init__(self, parser):
+
+        #TODO this should be parsed from config.ini 
+        #TODO !!!!NB!!!! on ctchpcvd002 env, the dir we need to replacce is /SFS/hpcapi/dev/
+
+
+        super(FileShaTest, self).__init__(parser, 'FILE', 'sha', 'post')
+        try:
+
+            filename = _random_file_name()
+
+            self.filepath_ssh = '/SFS/hpcapi/dev/QSPWBUSERS/'+self.user_a+"/"+filename
+            self._ssh_create_file(self.filepath_ssh)
+
+            self.filepath_sha = "QSPWBUSERS/"+self.user_a+"/"+filename
+            self._chk_sha(self.filepath_sha)
+
+        except UATError as e:
+            e.emsg()
+        except:
+            logger_settings.logger.debug('Something was very wrong with test:{0}'.format(str(sys.exc_info()[1])))
+        finally: 
+            self._close()    
+
+
+    def _ssh_create_file(self, filepath):
+        self.test_name.append('Create file on disk using unix commands')
+        logger_settings.logger.info('Generating test file name:  {0}'.format(filepath))
+        ret = nodeip.nodeipexecute(self.remotehost,'touch {0}'.format(filepath))
+        ret = nodeip.nodeipexecute(self.remotehost,'ls {0}'.format(filepath))
+        if (ret != filepath):
+            raise(UATError(ExceptionType.RETURN_VALUES, " at _ssh_create_file"))
+  
+
+    def _chk_sha(self, filepath_sha):
+        self.test_name.append('Get SHA of randomly created file')
+        ret = nodeip.nodeipexecute(self.remotehost,'sha1sum {0}'.format(self.filepath_ssh))
+        # TODO: thank you Jan!!!!!!!
+        ret_api = get_sha(self.url, self.ticket, filepath_sha) 
+        # TODO: change the array/array/array in the api
+        ret_api =  str( ret_api['data'][0]['hashCode'])
+
+        if (ret_api not in ret):
+            raise(UATError(ExceptionType.RETURN_VALUES, " at _ssh_get_sha: mistmatch"))
+        else:
+            logger_settings.logger.info('PASSED')
+
+
+
+# Not part of the class --------------------------------------------------------
+def _random_file_name(size=8, chars=string.ascii_uppercase + string.digits):
+    name = ''.join(random.choice(chars) for x in range(size))
+    return (name + ".txt")
+
+
+
